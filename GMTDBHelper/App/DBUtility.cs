@@ -89,24 +89,29 @@ namespace GMTDBHelper.App
         //its general method
         public static object getDataFromQuery<T>(string QUERY, string DATA_TYPE)
         {
-            //check if db is connected
+            //check if db is connected Simple C# Database connector for Mysql,Sqlite And Access DB
             DBUtility.checkOrSetConnection();
 
             if (DB_TYPE == "MYSQL")
             {
-                return getDataFromMysqlQuery<T>(QUERY, DATA_TYPE);
+                object d = getDataFromMysqlQuery<T>(QUERY, DATA_TYPE);
+                return (DATA_TYPE == "LIST" && d == null) ? new List<T>() : (DATA_TYPE == "DT" && d == null ? new DataTable() : d);
             }
             else if (DB_TYPE == "ACCESS")
             {
-                return getDataFromAccessQuery<T>(QUERY, DATA_TYPE);
+                //return getDataFromAccessQuery<T>(QUERY, DATA_TYPE);
+                object d = getDataFromAccessQuery<T>(QUERY, DATA_TYPE);
+                return (DATA_TYPE == "LIST" && d == null) ? new List<T>() : (DATA_TYPE == "DT" && d == null ? new DataTable() : d);
             }
             else if (DB_TYPE == "SQLITE")
             {
-                return getDataFromSQLiteQuery<T>(QUERY, DATA_TYPE);
+                //return getDataFromSQLiteQuery<T>(QUERY, DATA_TYPE);
+                object d = getDataFromSQLiteQuery<T>(QUERY, DATA_TYPE);
+                return (DATA_TYPE == "LIST" && d == null) ? new List<T>() : (DATA_TYPE == "DT" && d == null ? new DataTable() : d);
             }
             else
             {
-                return null;
+                return DATA_TYPE == "LIST" ? new List<T>() : null;;
             }
         }
 
@@ -151,8 +156,8 @@ namespace GMTDBHelper.App
 
                 switch (DATA_TYPE)
                 {
-                    case "DT": return dt;
-                    case "AD": return adapter;
+                    case "DT": return dt; 
+                    case "AD": return adapter; 
                     case "LIST": return DBUtility.DataTable2ObjList<T>(dt);
                     default: return DBUtility.DataTable2ObjList<T>(dt);
                 }
@@ -160,7 +165,7 @@ namespace GMTDBHelper.App
             catch (Exception ex)
             {
                 MessageBox.Show(ex.Message);
-                return null;
+                return DATA_TYPE == "LIST" ? new List<T>() : null;
             }
             finally { MYSQL_CONNECTION.Close(); };
         }
@@ -214,7 +219,7 @@ namespace GMTDBHelper.App
             {
                 Console.WriteLine(ex.Message);
                 MessageBox.Show(ex.Message);
-                return null;
+                return dataType == "LIST" ? new List<T>() : null;
             }
             finally { ACCESS_CONNECTION.Close(); };
         }
@@ -268,7 +273,7 @@ namespace GMTDBHelper.App
             {
                 Console.WriteLine(ex.Message);
                 MessageBox.Show(ex.Message);
-                return null;
+                return dataType == "LIST" ? new List<T>() : null;
             }
             finally { SQLITE_CONNECTION.Close(); };
         }
@@ -297,10 +302,20 @@ namespace GMTDBHelper.App
 
         public static List<T> DataTable2ObjList<T>(DataTable table)
         {
-            string json = DBUtility.DataTable2Json(table);
-            List<T> list = Newtonsoft.Json.JsonConvert.DeserializeObject<List<T>>(json);
-            return list;
+            try
+            {
+                string json = DBUtility.DataTable2Json(table);
+                List<T> list = Newtonsoft.Json.JsonConvert.DeserializeObject<List<T>>(json);
+                return list == null ? new List<T>() : list;
+            }
+            catch(Exception ex){
+                Console.WriteLine("EXCEPTION::@DataTable2ObjList-GMTDBHelperDBUtil:" + ex.Message);
+                return new List<T>();
+            }
         }
+       
+
+
         public static string DataTable2Json(DataTable table)
         {
             var JSONString = new StringBuilder();
@@ -314,11 +329,11 @@ namespace GMTDBHelper.App
                     {
                         if (j < table.Columns.Count - 1)
                         {
-                            JSONString.Append("\"" + table.Columns[j].ColumnName.ToString() + "\":" + "\"" + table.Rows[i][j].ToString() + "\",");
+                            JSONString.Append("\"" + table.Columns[j].ColumnName.ToString() + "\":" + "\"" + (table.Rows[i][j] != null ? table.Rows[i][j].ToString() : "") + "\",");
                         }
                         else if (j == table.Columns.Count - 1)
                         {
-                            JSONString.Append("\"" + table.Columns[j].ColumnName.ToString() + "\":" + "\"" + table.Rows[i][j].ToString() + "\"");
+                            JSONString.Append("\"" + table.Columns[j].ColumnName.ToString() + "\":" + "\"" + (table.Rows[i][j] != null ? table.Rows[i][j].ToString() : "") + "\"");
                         }
                     }
                     if (i == table.Rows.Count - 1)

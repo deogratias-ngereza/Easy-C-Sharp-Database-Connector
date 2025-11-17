@@ -15,5 +15,7 @@ namespace GMTDBHelper.App.Models
         public string db_name { get; set; }
         public string db_host { get; set; }
         public int db_port { get; set; }
+
+        public string db_path { get; set; }
     }
 }

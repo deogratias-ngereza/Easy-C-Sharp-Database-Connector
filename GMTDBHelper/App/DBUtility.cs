@@ -148,23 +148,28 @@ namespace GMTDBHelper.App
                     MYSQL_CONNECTION.Open();
                 }
 
-                MySqlDataAdapter adapter = new MySqlDataAdapter(QUERY, MYSQL_CONNECTION);
-                adapter.SelectCommand.CommandType = CommandType.Text;
+                //MySqlDataAdapter adapter = new MySqlDataAdapter(QUERY, MYSQL_CONNECTION);
+                //adapter.SelectCommand.CommandType = CommandType.Text;
 
-                DataTable dt = new DataTable();
-                adapter.Fill(dt);
-
-                switch (DATA_TYPE)
+                using (var adapter = new MySqlDataAdapter(QUERY, MYSQL_CONNECTION))
                 {
-                    case "DT": return dt; 
-                    case "AD": return adapter; 
-                    case "LIST": return DBUtility.DataTable2ObjList<T>(dt);
-                    default: return DBUtility.DataTable2ObjList<T>(dt);
+                    DataTable dt = new DataTable();
+                    adapter.Fill(dt);
+
+                    switch (DATA_TYPE)
+                    {
+                        case "DT": return dt;
+                        case "AD": return adapter;
+                        case "LIST": return DBUtility.DataTable2ObjList<T>(dt);
+                        default: return DBUtility.DataTable2ObjList<T>(dt);
+                    }
                 }
+
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message);
+               // MessageBox.Show("EX:getDataFromMysqlQuery + " + ex.Message);
+                Console.WriteLine("EX:getDataFromMysqlQuery + " + ex.Message + "-" + ex.StackTrace);
                 return DATA_TYPE == "LIST" ? new List<T>() : null;
             }
             finally { MYSQL_CONNECTION.Close(); };
@@ -179,8 +184,13 @@ namespace GMTDBHelper.App
                     MYSQL_CONNECTION.Open();
                 }
 
-                MySqlCommand command = new MySqlCommand(query, MYSQL_CONNECTION);
-                command.ExecuteNonQuery();
+                //MySqlCommand command = new MySqlCommand(query, MYSQL_CONNECTION);
+                //command.ExecuteNonQuery();
+                //return 0;
+                using (var command = new MySqlCommand(query, MYSQL_CONNECTION))
+                {
+                    command.ExecuteNonQuery();
+                }
                 return 0;
             }
             catch (Exception ex)
@@ -426,7 +436,14 @@ namespace GMTDBHelper.App
             }
             else if (dbConfig.db_type == "SQLITE")
             {
-                return @"Data Source=" + executing_path + @"\db\" + dbConfig.db_name + ";Version=3;";
+                if (dbConfig.db_path == "" || dbConfig.db_path == null)
+                {
+                    return @"Data Source=" + executing_path + @"\db\" + dbConfig.db_name + ";Version=3;";
+                }
+                else
+                {
+                    return @"Data Source='"+dbConfig.db_path+"';Version=3;";
+                }
             }
             else
             {

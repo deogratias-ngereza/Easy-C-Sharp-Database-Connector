@@ -36,7 +36,15 @@ namespace GMTDBHelper.App
             }
             else if (dbConfig.db_type == "SQLITE")
             {
-                return @"Data Source=" + executing_path + @"\db\" + dbConfig.db_name + ";Version=3;";
+                if (dbConfig.db_path == "" || dbConfig.db_path == null)
+                {
+                    return @"Data Source=" + executing_path + @"\db\" + dbConfig.db_name + ";Version=3;";
+                }
+                else
+                {
+                    return @"Data Source='" + dbConfig.db_path + "';Version=3;";
+                }
+                
             }
             else
             {

@@ -20,8 +20,11 @@ namespace GMTDBHelper.App
         private static SQLiteConnection SQLITE_CONNECTION;
 
         public static string DB_TYPE = ""; // Can be MYSQL, ACCESS, or SQLITE
+        public static string connection_string = "";
+
 
         public static DBFileConfig db_file_config;
+
 
         public DBUtility(string db_type, string connStr)
         {
@@ -67,6 +70,7 @@ namespace GMTDBHelper.App
                 db_file_config = DBUtility.set_main_db_file_config();
                 DBUtility.DB_TYPE = db_file_config.db_type;
                 connStr = DBUtility.getConnectionString(db_file_config);
+                connection_string=connStr;
             }
             //
             var db_type = db_file_config.db_type;
@@ -83,6 +87,16 @@ namespace GMTDBHelper.App
             {
                 SQLITE_CONNECTION = new SQLiteConnection(connStr);
             }
+
+        }
+        public static string GetConnectionString(){
+            
+            if (connection_string == null || connection_string == "")
+            {
+                //check if db is connected
+                DBUtility.checkOrSetConnection();
+            }
+            return connection_string;
 
         }
 
@@ -139,7 +153,7 @@ namespace GMTDBHelper.App
         }
 
         // MySQL Implementation
-        private static Object getDataFromMysqlQuery<T>(string QUERY, string DATA_TYPE)
+        private static Object getDataFromMysqlQueryOld<T>(string QUERY, string DATA_TYPE)
         {
             try
             {
@@ -175,7 +189,81 @@ namespace GMTDBHelper.App
             finally { MYSQL_CONNECTION.Close(); };
         }
 
+        private static Object getDataFromMysqlQuery<T>(string QUERY, string DATA_TYPE)
+        {
+            try
+            {
+                string connectionString = GetConnectionString();
+                using (var connection = new MySqlConnection(connectionString))
+                {
+                    connection.Open();
+
+                    using (var adapter = new MySqlDataAdapter(QUERY, MYSQL_CONNECTION))
+                    {
+                        DataTable dt = new DataTable();
+                        adapter.Fill(dt);
+
+                        switch (DATA_TYPE)
+                        {
+                            case "DT": return dt;
+                            case "AD": return adapter;
+                            case "LIST": return DBUtility.DataTable2ObjList<T>(dt);
+                            default: return DBUtility.DataTable2ObjList<T>(dt);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // MessageBox.Show("EX:getDataFromMysqlQuery + " + ex.Message);
+                Console.WriteLine("EX:getDataFromMysqlQuery + " + ex.Message + "-" + ex.StackTrace);
+                return DATA_TYPE == "LIST" ? new List<T>() : null;
+            }
+            finally { 
+                //MYSQL_CONNECTION.Close(); 
+            };
+        }
+
+
         private static int runBasicMysqlQuery(string query)
+        {
+
+            
+            // Best Practice: Instantiate the connection within the method or use 
+            // a connection string factory method to ensure a fresh context.
+            // Assuming 'GetConnectionString()' is a method that returns your connection string:
+            string connectionString = GetConnectionString();
+
+            // Use 'using' blocks for automatic resource management (IDisposable)
+            try
+            {
+                // The 'using' statement here ensures that MYSQL_CONNECTION.Close() 
+                // is automatically called when the block is exited, even if an exception occurs.
+                using (var connection = new MySqlConnection(connectionString))
+                {
+                    connection.Open();
+
+                    using (var command = new MySqlCommand(query, connection))
+                    {
+                        // ExecuteNonQuery returns the number of rows affected, which can be useful
+                        int rowsAffected = command.ExecuteNonQuery();
+                        // You might want to return rowsAffected instead of a hardcoded 0 or 1
+                    }
+                }
+                return 0; // Success
+            }
+            catch (Exception ex)
+            {
+                // Log the exception details properly instead of just showing a message box
+                Console.WriteLine(ex.ToString());
+                MessageBox.Show("A database error occurred: " + ex.Message);
+                return 1; // Error
+            }
+            // The 'finally' block is handled automatically by the 'using (var connection...)' statement
+        }
+
+
+        private static int runBasicMysqlQueryOld(string query)
         {
             try
             {
@@ -310,7 +398,7 @@ namespace GMTDBHelper.App
         }
 
 
-        public static List<T> DataTable2ObjList<T>(DataTable table)
+        public static List<T> DataTable2ObjListOld<T>(DataTable table)
         {
             try
             {
@@ -323,7 +411,118 @@ namespace GMTDBHelper.App
                 return new List<T>();
             }
         }
-       
+
+        public static List<T> DataTable2ObjListx<T>(DataTable table)
+        {
+            try
+            {
+                // Sanitize data
+                foreach (DataRow row in table.Rows)
+                {
+                    foreach (DataColumn column in table.Columns)
+                    {
+                        string value = row[column].ToString();
+                        if (value != null)
+                        {
+                            row[column] = value.Replace("\\", "\\\\").Replace("\"", "\\\"");
+                        }
+                    }
+                }
+
+                // Convert to JSON
+                string json = Newtonsoft.Json.JsonConvert.SerializeObject(table);
+
+                // Deserialize into List<T>
+                List<T> list = Newtonsoft.Json.JsonConvert.DeserializeObject<List<T>>(json);
+                return list ?? new List<T>();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("EXCEPTION::@DataTable2ObjList-GMTDBHelperDBUtil:" + ex.Message);
+                return new List<T>();
+            }
+        }
+
+        public static List<T> DataTable2ObjList<T>(DataTable table)
+        {
+            try
+            {
+                // Validate and sanitize data for all columns based on their types
+                foreach (DataRow row in table.Rows)
+                {
+                    foreach (DataColumn column in table.Columns)
+                    {
+                        // If the current column value is not DBNull, validate it
+                        if (row[column] != DBNull.Value)
+                        {
+                            object value = row[column];
+
+                            // Get the expected type from the model T
+                            Type targetType = GetColumnType<T>(column.ColumnName);
+                    
+                            if (targetType != null)
+                            {
+                                bool isValid = true;
+
+                                // Try to convert the column to its expected type
+                                if (targetType == typeof(decimal))
+                                {
+                                    decimal result;
+                                    if (!decimal.TryParse(value.ToString(), out result))
+                                    {
+                                        isValid = false; // invalid
+                                    }
+                                }
+                                else if (targetType == typeof(int))
+                                {
+                                    int result;
+                                    if (!int.TryParse(value.ToString(), out result))
+                                    {
+                                        isValid = false; // invalid
+                                    }
+                                }
+                                else if (targetType == typeof(DateTime))
+                                {
+                                    DateTime result;
+                                    if (!DateTime.TryParse(value.ToString(), out result))
+                                    {
+                                        isValid = false; // invalid
+                                    }
+                                }
+                                // Add validation for other types as necessary
+
+                                // Handle the invalid case
+                                if (!isValid)
+                                {
+                                    row[column] = DBNull.Value; // Set to NULL or handle as needed
+                                    //Console.WriteLine($"Invalid value for {column.ColumnName}: {value}");
+                                    Console.WriteLine("DataTable2ObjList-GMTDBHelperDBUtil:Invalid value for {" + column.ColumnName + "}: {" + value + "}");
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Convert to JSON
+                string json = Newtonsoft.Json.JsonConvert.SerializeObject(table);
+
+                // Deserialize into List<T>
+                List<T> list = Newtonsoft.Json.JsonConvert.DeserializeObject<List<T>>(json);
+                return list ?? new List<T>();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("EXCEPTION::@DataTable2ObjList-GMTDBHelperDBUtil:" + ex.Message);
+                return new List<T>();
+            }
+        }
+
+        private static Type GetColumnType<T>(string columnName)
+        {
+            // Use reflection to get the property type from the class T
+            var property = typeof(T).GetProperty(columnName);
+            return property == null ? null : property.PropertyType;
+        }
 
 
         public static string DataTable2Json(DataTable table)
